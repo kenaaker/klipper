@@ -8,6 +8,18 @@ All dates in this document are approximate.
 
 ## Changes
 
+20230530: The default canbus frequency in "make menuconfig" is
+now 1000000. If using canbus and using canbus with some other
+frequency is required, then be sure to select "Enable extra low-level
+configuration options" and specify the desired "CAN bus speed" in
+"make menuconfig" when compiling and flashing the micro-controller.
+
+20230525: `SHAPER_CALIBRATE` command immediately applies input shaper
+parameters if `[input_shaper]` was enabled already.
+
+20230407: The `stalled_bytes` counter in the log and in the
+`printer.mcu.last_stats` field has been renamed to `upcoming_bytes`.
+
 20230304: The `SET_TMC_CURRENT` command now properly adjusts the globalscaler
 register for drivers that have it. This removes a limitation where on tmc5160,
 the currents could not be raised higher with `SET_TMC_CURRENT` than the
