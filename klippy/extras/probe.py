@@ -117,16 +117,24 @@ class PrinterProbe:
         curtime = self.printer.get_reactor().monotonic()
         if 'z' not in toolhead.get_status(curtime)['homed_axes']:
             raise self.printer.command_error("Must home before probe")
-        phoming = self.printer.lookup_object('homing')
         pos = toolhead.get_position()
         pos[2] = self.z_position
         try:
-            epos = phoming.probing_move(self.mcu_probe, pos, speed)
+            epos = self.mcu_probe.probing_move(pos, speed)
         except self.printer.command_error as e:
             reason = str(e)
             if "Timeout during endstop homing" in reason:
                 reason += HINT_TIMEOUT
             raise self.printer.command_error(reason)
+        # get z compensation from axis_twist_compensation
+        axis_twist_compensation = self.printer.lookup_object(
+            'axis_twist_compensation', None)
+        z_compensation = 0
+        if axis_twist_compensation is not None:
+            z_compensation = (
+                axis_twist_compensation.get_z_compensation_value(pos))
+        # add z compensation to probe position
+        epos[2] += z_compensation
         self.gcode.respond_info("probe at %.3f,%.3f is z=%.6f"
                                 % (epos[0], epos[1], epos[2]))
         return epos[:3]
@@ -316,14 +324,14 @@ class ProbeEndstopWrapper:
         for stepper in kin.get_steppers():
             if stepper.is_active_axis('z'):
                 self.add_stepper(stepper)
-    def raise_probe(self):
+    def _raise_probe(self):
         toolhead = self.printer.lookup_object('toolhead')
         start_pos = toolhead.get_position()
         self.deactivate_gcode.run_gcode_from_command()
         if toolhead.get_position()[:3] != start_pos[:3]:
             raise self.printer.command_error(
                 "Toolhead moved during probe activate_gcode script")
-    def lower_probe(self):
+    def _lower_probe(self):
         toolhead = self.printer.lookup_object('toolhead')
         start_pos = toolhead.get_position()
         self.activate_gcode.run_gcode_from_command()
@@ -337,16 +345,19 @@ class ProbeEndstopWrapper:
     def multi_probe_end(self):
         if self.stow_on_each_sample:
             return
-        self.raise_probe()
+        self._raise_probe()
         self.multi = 'OFF'
+    def probing_move(self, pos, speed):
+        phoming = self.printer.lookup_object('homing')
+        return phoming.probing_move(self, pos, speed)
     def probe_prepare(self, hmove):
         if self.multi == 'OFF' or self.multi == 'FIRST':
-            self.lower_probe()
+            self._lower_probe()
             if self.multi == 'FIRST':
                 self.multi = 'ON'
     def probe_finish(self, hmove):
         if self.multi == 'OFF':
-            self.raise_probe()
+            self._raise_probe()
     def get_position_endstop(self):
         return self.position_endstop
 
